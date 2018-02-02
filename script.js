@@ -8,127 +8,134 @@
  * 1. predict every cell's next life condition
  * 2. change to next life
  */
-const $body = document.getElementsByTagName('body')[0];
-const $container = document.createElement('table');
-const $tbody = document.createElement('tbody');
+var $body = document.getElementsByTagName('body')[0];
+var $container = document.createElement('table');
+var $tbody = document.createElement('tbody');
 
 $container.appendChild($tbody);
 $body.appendChild($container);
 
-const ROWS = 30;
-const COLS = 30;
+var ROWS = 30;
+var COLS = 30;
+
+var pool = [];
+for (var r = 0; r < ROWS; r++) {
+  pool[r] = [];
+
+  for (var c = 0; c < COLS; c++) {
+    pool[r][c] = 0; // dead cell
+  }
+}
 
 // Setup
-for (let r = 0; r < ROWS; r++) {
-
-  const $tr = document.createElement('tr');
+for (var r = 0; r < ROWS; r++) {
+  var $tr = document.createElement('tr');
   $tr.id = `r${r}`;
 
-  for (let c = 0; c < COLS; c++) {
-    const $td = document.createElement('td');
+  for (var c = 0; c < COLS; c++) {
+    var $td = document.createElement('td');
     $td.id = `${r}-${c}`;
-    $td.addEventListener('click', onClick);
+    $td.addEventListener('click', function(e) {
+      var pos = e.target.id.split('-').map(i => parseInt(i, 10));
+
+      if (e.target.className) {
+        pool[pos[0]][pos[1]] = 0;
+        e.target.className = '';
+      } else {
+        pool[pos[0]][pos[1]] = 1;
+        e.target.className = 'alive';
+      }
+    });
     $tr.appendChild($td);
   }
 
   $tbody.appendChild($tr);
 }
 
-function getNeighbours(cell, ROWS, COLS) {
-  let [r, c] = cell.id.split('-').map(i => parseInt(i, 10));
-  const _left = c - 1 < 0 ? COLS - 1 : c - 1;
-  const _top = r - 1 < 0 ? ROWS - 1 : r - 1;
-  const _right = c + 1 >= COLS ? 0 : c + 1;
-  const _bottom = r + 1 >= ROWS ? 0 : r + 1;
+function tick(pool) {
+  var newPool = [];
 
-  let idTopLeft = `${_top}-${_left}`;
-  let idTopCenter = `${_top}-${c}`;
-  let idTopRight = `${_top}-${_right}`;
-  let idLeftCenter = `${r}-${_left}`;
-  let idRightCenter = `${r}-${_right}`;
-  let idBottomLeft = `${_bottom}-${_left}`;
-  let idBottomCenter = `${_bottom}-${c}`;
-  let idBottomRight = `${_bottom}-${_right}`;
+  function getCell(pool, r, c) {
+    return pool[r][c];
+  }
 
-  const neighbours = [
-    $e(idTopLeft), $e(idTopCenter), $e(idTopRight),
+  function setCell(pool, r, c, state) {
+    pool[r][c] = state;
+  }
 
-    $e(idLeftCenter), $e(idRightCenter),
+  function nextGen(pool, r, c) {
+    var isAlive = getCell(pool, r, c);
 
-    $e(idBottomLeft), $e(idBottomCenter), $e(idBottomRight),
-  ];
+    var _left = c - 1 < 0 ? COLS - 1 : c - 1;
+    var _top = r - 1 < 0 ? ROWS - 1 : r - 1;
+    var _right = c + 1 >= COLS ? 0 : c + 1;
+    var _bottom = r + 1 >= ROWS ? 0 : r + 1;
 
-  let liveCount = 0;
+    var neighbours = [
+      getCell(pool, _top, _left), getCell(pool, _top, c), getCell(pool, _top, _right),
 
-  var isAlive = cell.className === 'live';
+      getCell(pool, r, _left), getCell(pool, r, _right),
 
-  neighbours.forEach(function(cell) {
-    if (cell.className === 'live') {
-      liveCount += 1;
+      getCell(pool, _bottom, _left), getCell(pool, _bottom, c), getCell(pool, _bottom, _right)
+    ];
+
+    var liveCount = neighbours.filter(function(c) { return !!c }).length;
+
+    // Rule-1. Any live cell with fewer than two live neighbours dies, as if caused by underpopulation.
+    if (isAlive && liveCount < 2) {
+      return 0;
     }
+
+    // Rule-2. Any live cell with two or three live neighbours lives on to the next generation.
+    if (isAlive && (liveCount === 2 || liveCount === 3)) {
+      return 1;
+    }
+
+    // Rule-3. Any live cell with more than three live neighbours dies, as if by overpopulation.
+    if (isAlive && liveCount > 3) {
+      return 0;
+    }
+
+    // Rule-4. Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+    if (!isAlive && liveCount === 3) {
+      return 1;
+    }
+  }
+
+  for (var r = 0; r < ROWS; r++) {
+    newPool[r] = [];
+    for (var c = 0; c < COLS; c++) {
+      setCell(newPool, r, c, nextGen(pool, r, c));
+    }
+  }
+
+  return newPool;
+}
+
+function draw(pool) {
+  document.querySelectorAll('td').forEach(function (cell) {
+    var pos = cell.id.split('-').map(i => parseInt(i, 10));
+    cell.className = pool[pos[0]][pos[1]] ? 'alive' : 'dead';
   });
-
-  // Rule-1. Any live cell with fewer than two live neighbours dies, as if caused by underpopulation.
-  if (isAlive && liveCount < 2) {
-    cell.setAttribute('next-life', 'dead');
-    return;
-  }
-
-  // Rule-2. Any live cell with two or three live neighbours lives on to the next generation.
-  if (isAlive && (liveCount === 2 || liveCount === 3)) {
-    cell.setAttribute('next-life', 'live');
-    return;
-  }
-
-  // Rule-3. Any live cell with more than three live neighbours dies, as if by overpopulation.
-  if (isAlive && liveCount > 3) {
-    cell.setAttribute('next-life', 'dead');
-    return;
-  }
-
-  // Rule-4. Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
-  if (!isAlive && liveCount === 3) {
-    cell.setAttribute('next-life', 'live');
-    return;
-  }
-
-  function $e(id) {
-    return document.getElementById(id);
-  }
-}
-
-function getLives() {
-  return document.getElementsByClassName('live');
-}
-
-function onClick(e) {
-  e.target.className = 'live';
 }
 
 function loop() {
-  document.querySelectorAll('td').forEach(function (cell) {
-    getNeighbours(cell, ROWS, COLS);
-  });
-
-  document.querySelectorAll('td').forEach(function (cell) {
-    cell.className = cell.getAttribute('next-life');
-  });
+  pool = tick(pool);
+  draw(pool);
 }
 
 let timer;
 
-function start() {
-  timer = setInterval(loop, 50);
-}
-
-function stop() {
+document.getElementById('start').addEventListener('click', function() {
   if (timer) {
     clearInterval(timer);
   }
-}
 
-const startBtn = document.getElementById('start')
-startBtn.addEventListener('click', start);
+  timer = setInterval(loop, 50);
+});
 
-const stopBtn = document.getElementById('stop');
-stopBtn.addEventListener('click', stop);
+document.getElementById('stop').addEventListener('click', function() {
+  if (timer) {
+    clearInterval(timer);
+  }
+});
